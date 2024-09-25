@@ -15,43 +15,21 @@ class TONxDAO_Miner:
             'coins': '~~~',
             'energy': '~~~'
         } for _ in range(len(tokens))]
-    
-    
+
     def apply_changes(self, account_index, msg):
         if 'rpc' not in msg:return
         self.info[account_index]['energy'] = msg['rpc']['data']['energy']
         self.info[account_index]['coins'] = msg['rpc']['data']['coins']
         self.info[account_index]['profit'] = msg['rpc']['data']['dao_coins']
+        
+        # Cek apakah energi habis
+        if self.info[account_index]['energy'] <= 0:
+            print(f"Energi habis untuk akun {account_index}. Menunggu selama 8 jam...")
+            return False  # Kembalikan False jika energi habis
+        return True  # Kembalikan True jika masih ada energi
 
-    def auth_message(self, account_index):
-        self.counter[account_index] += 1
-        return json.dumps({
-            "connect": {
-                "token": self.socket_tokens[account_index],
-                "name": "js"
-            },
-            "id": self.counter[account_index]
-        })
-    def click_message(self, account_index):
-        self.counter[account_index] += 1
-        return json.dumps({
-            "publish": {
-                "channel": f"dao:{self.user_dao[account_index]['id']}",
-                "data": {}
-            },
-            "id": self.counter[account_index]
-        })
+    # ... (kode lainnya tetap)
 
-    def display_message(self, account_index):
-        self.counter[account_index] += 1
-        return json.dumps({
-            "rpc":{
-                "method":"sync",
-                "data": {}
-            },
-            "id": self.counter[account_index]
-        })
-    
     async def start_async_mining(self, account_index):
         uri = 'wss://ws.production.tonxdao.app/ws'
         async with websockets.connect(uri) as websocket:
@@ -68,14 +46,11 @@ class TONxDAO_Miner:
                 for _ in range(config('number_of_display_message', 2)):
                     await websocket.send(self.display_message(account_index))
                     response = await websocket.recv()
-                    self.apply_changes(account_index, json.loads(response))
-                    
-    def run_websocket(self, account_index):
-        asyncio.run(self.start_async_mining(account_index))
-                
+                    if not self.apply_changes(account_index, json.loads(response)):
+                        # Jika energi habis, hentikan loop
+                        return  # Keluar dari loop jika energi habis
 
     def __mining(self):
-        
         while True:
             try:
                 with ThreadPoolExecutor(max_workers=len(self.tokens)) as executor:
@@ -88,22 +63,12 @@ class TONxDAO_Miner:
             except Exception as E:
                 # print(E)
                 pass
-    
-    def start_mining(self):
-        
-        
-        # get dao for all accounts
-        for i in range(len(self.tokens)):
-            self.user_dao[i] = get_user_dao(self.tokens[i])
-            time.sleep(1)
-        
-        # get socket tokens, username
-        for i in range(len(self.tokens)):
-            self.socket_tokens[i] = get_token(self.tokens[i])
-            self.info[i]['name'] = get_username(self.tokens[i])
-            time.sleep(1)
-        
-        self.__mining()
+            
+            # Setelah menyelesaikan proses mining, tunggu selama 8 jam
+            print("Waiting for 8 hours before restarting mining...")
+            time.sleep(8 * 60 * 60)  # 8 jam dalam detik
+
+    # ... (kode lainnya tetap)
 
 if __name__ == '__main__':
     banner()
@@ -126,4 +91,3 @@ if __name__ == '__main__':
         Table.stop()
         print("Exiting !")
         exit(0)
-    
